@@ -1,9 +1,103 @@
 #include "init_proj_cmdopt.hpp"
-#include <argumentum/inc/argparser.h>
+#include <cstdlib>
+#include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
+#include <nlohmann/json.hpp>
+
+namespace fs = std::filesystem;
+
+void InitProjCmdOptions::execute(const argumentum::ParseResult&) {
+  //std::cout << "Hello, World!" << std::endl;
+
+  if (this->is_c_project) {
+    // TODO: check consistency between c projects or c++ projects
+    //       and the standard version.
+  }
+  
+  // Check if `cmake` exists
+  std::clog << "Check if `cmake` exists in system...\n";
+  if (system("which cmake > /dev/null 2>&1")) {
+    // Command does not exist...
+    std::cerr << "cmake does not exist in system. Exiting...";
+    return; // I should've used exit(1) but it seems ugly here
+            // I wonder if this library (argumentum) provides
+            // features to fire errors from subcommand.
+  }
+
+  // Create a folder called <project_name>
+  std::clog << "Creating folder " << this->project_name << "...\n";
+  fs::path new_directory = fs::current_path();
+  new_directory /= this->project_name;
+  std::error_code ec;
+  if (!fs::create_directory(new_directory, ec)) {
+    std::cerr << "Fail to create directory: " << this->project_name << ".\n";
+    std::cerr << "Reason: " << ec.message() << '\n' << std::endl;
+    return;
+  }
+
+  std::clog << "Creating source, objects, and outputs directory...\n";
+  // Create folder `src`, `obj`, `out` inside <project_name>.
+  fs::path src_path = (new_directory / this->source_dir),
+           obj_path = (new_directory / this->object_dir),
+           out_path = (new_directory / this->output_dir);
+
+  if (!fs::create_directory(src_path, ec)) {
+    std::cerr << "Fail to create source directory: " << this->source_dir << ".\n"
+              << "Reason: " << ec.message() << '\n' << std::endl;
+    return;
+  }
+
+  if (!fs::create_directory(obj_path, ec)) {
+    std::cerr << "Fail to create objects directory: " << this->object_dir << ".\n"
+              << "Reason: " << ec.message() << '\n' << &std::endl;
+    return;
+  }
+
+  if (!fs::create_directory(out_path, ec)) {
+    std::cerr << "Fail to create output directory: " << this->output_dir << ".\n"
+              << "Reason: " << ec.message() << '\n' << std::endl;
+    return;
+  }
+
+  std::clog << "Writing project information...\n";
+  // Write project.json file to project directory. 
+  using namespace nlohmann;
+  json json;
+  json["project-name"] = this->project_name;
+  json["language"] = this->is_c_project ? "c" : "c++";
+  json["std"] = this->std_version;
+  json["src-dir"] = fs::relative(src_path, new_directory);
+  json["obj-dir"] = fs::relative(obj_path, new_directory);
+  json["out-dir"] = fs::relative(out_path, new_directory);
+  json["targets"] = json::array({
+    json::object({
+      {"name", this->project_name},
+      {"type", "executable"},
+      {"links", json::array()},
+      {"include-dir", json::array()},
+      {"sources", json::array({fs::relative(src_path/"main.cpp", new_directory)})}
+    })
+  });
+  json["global-include-dir"] = nlohmann::json::array();
+
+  std::ofstream project(new_directory/"project.json");
+  project << std::setw(4) << json;
+  project.close();
+
+  std::ofstream main_file(src_path/"main.cpp");
+  main_file << 
+  "#include <iostream>\n\n"
+  "int main(int argc, char *argv[])\n"
+  "{\n"
+  "\tstd::cout << \"Hello, world!\" << std::endl;\n"
+  "}";
+
+  // TODO: Generate CMakeLists.txt from `project.json` 
 
 
-void InitProjCmdOptions::execute(const argumentum::ParseResult &res) {
-  std::cout << "Hello, World!" << std::endl;
+  std::cout << "All done! Your project is in " << new_directory << '\n';
 }
 
 
