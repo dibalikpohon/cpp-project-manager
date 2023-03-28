@@ -1,10 +1,12 @@
-#include "init_proj_cmdopt.hpp"
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
 #include <nlohmann/json.hpp>
+#include "init_proj_cmdopt.hpp"
+#include "../cmakegen/cmakegen.hpp"
 
 namespace fs = std::filesystem;
 
@@ -12,10 +14,33 @@ void InitProjCmdOptions::execute(const argumentum::ParseResult&) {
   //std::cout << "Hello, World!" << std::endl;
 
   if (this->is_c_project) {
-    // TODO: check consistency between c projects or c++ projects
-    //       and the standard version.
+    // Check if one of them matches in `cstd`, otherwise,
+    // return error.
+    std::vector<std::string> cstd {"c90", "c99", "c11", "c17"};
+    bool found = false;
+    for (const auto& str : cstd) {
+      if (this->std_version.find(str) != std::string::npos) {
+        this->std_version = std::string(str.end() - 2, str.end());
+        found = true; 
+        break;
+      }
+    }
+    if (!found)
+      throw std::invalid_argument("Invalid C standard version.");    
+  } else {
+    std::vector<std::string> cxxstd {"c++98", "c++11", "c++14", "c++17", "c++20"};
+    bool found = false;
+    for (const auto& str : cxxstd) {
+      if (this->std_version.find(str) != std::string::npos) {
+        this->std_version = std::string(str.end() - 2, str.end());
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      throw std::invalid_argument("Invalid C++ standard version");
   }
-  
+ 
   // Check if `cmake` exists
   std::clog << "Check if `cmake` exists in system...\n";
   if (system("which cmake > /dev/null 2>&1")) {
@@ -77,24 +102,49 @@ void InitProjCmdOptions::execute(const argumentum::ParseResult&) {
       {"type", "executable"},
       {"links", json::array()},
       {"include-dir", json::array()},
-      {"sources", json::array({fs::relative(src_path/"main.cpp", new_directory)})}
+      {"sources", json::array(
+                       {fs::relative(this->is_c_project ? (src_path/"main.c") : (src_path/"main.cpp"), new_directory)})}
     })
   });
   json["global-include-dir"] = nlohmann::json::array();
 
-  std::ofstream project(new_directory/"project.json");
-  project << std::setw(4) << json;
-  project.close();
+  std::ofstream projectjson(new_directory/"project.json");
+  projectjson << std::setw(4) << json;
+  projectjson.close();
 
-  std::ofstream main_file(src_path/"main.cpp");
-  main_file << 
-  "#include <iostream>\n\n"
-  "int main(int argc, char *argv[])\n"
-  "{\n"
-  "\tstd::cout << \"Hello, world!\" << std::endl;\n"
-  "}";
+  if(this->is_c_project) {
+    std::ofstream main_file(src_path/"main.c");
+    main_file << 
+        "#include <stdio.h>\n\n"
+        "int main(int argc, char *argv[])\n"
+        "{\n"
+        "\tprintf(\"Hello, world!\\n\");\n"
+        "}";
+  } else {
+    std::ofstream main_file(src_path/"main.cpp");
+    main_file << 
+        "#include <iostream>\n\n"
+        "int main(int argc, char *argv[])\n"
+        "{\n"
+        "\tstd::cout << \"Hello, world!\" << std::endl;\n"
+        "}";
+  }
 
   // TODO: Generate CMakeLists.txt from `project.json` 
+
+  using namespace cmakegen;
+  std::ofstream cmakelists(new_directory/"CMakeLists.txt");
+  
+  cmakelists << cmake_minimum_required("3.22") << '\n'
+             << project(this->project_name, this->is_c_project ? ProjectLanguage::C : ProjectLanguage::CXX) << "\n\n";
+
+  if (this->is_c_project) {
+    cmakelists << set(CmakeVariables::CMAKE_C_STANDARD, this->std_version); 
+  } else {
+    cmakelists << set(CmakeVariables::CMAKE_CXX_STANDARD, this->std_version);
+  }
+
+  cmakelists << '\n' << add_executable(this->project_name, {json["targets"][0]["sources"][0]});
 
 
   std::cout << "All done! Your project is in " << new_directory << '\n';
@@ -119,9 +169,9 @@ void InitProjCmdOptions::add_arguments(argumentum::argument_parser &parser) {
   params.add_parameter(std_version, "--std")
     .nargs(1)
     .metavar("<std>")
-    .help("What C/C++ std version to use, defaults to c++17")
+    .help("What C/C++ std version to use[c90 c99 c11 c17 c++98 c++11 c++14 c++17 c++20], defaults to c++17")
     .required(false)
-    .default_value("c++17");
+    .default_value("c++17"); 
 
   params.add_parameter(source_dir, "--src-dir")
     .nargs(1)
