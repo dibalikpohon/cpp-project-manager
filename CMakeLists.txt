@@ -10,6 +10,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Debug)
 
 add_library(init_proj_cmdopt OBJECT src/init_proj_cmdopt/init_proj_cmdopt.cpp)
+target_include_directories(init_proj_cmdopt PRIVATE src/cmakegen)
+ 
 add_library(cmakegen OBJECT src/cmakegen/cmakegen.cpp)
 
 target_link_libraries(cmakegen PUBLIC fmt::fmt)
@@ -17,6 +19,8 @@ target_link_libraries(cmakegen PUBLIC fmt::fmt)
 add_executable(pprojman src/main.cpp)
 target_link_libraries(pprojman PRIVATE Argumentum::argumentum)
 target_link_libraries(pprojman PRIVATE init_proj_cmdopt)
+target_link_libraries(pprojman PRIVATE cmakegen)
+
 
 enable_testing()
 
