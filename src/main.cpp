@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <argumentum/argparse.h>
+#include <fmt/core.h>
 #include "init_proj_cmdopt/init_proj_cmdopt.hpp"
 
 int main(int argc, char* argv[]) {
@@ -23,7 +24,12 @@ int main(int argc, char* argv[]) {
   auto pcmd = res.commands.front();
   if (!pcmd) return 1;
 
-  pcmd->execute(res);
+  try {
+    pcmd->execute(res);
+  } catch (std::exception& e) {
+    fmt::print(stderr, "an error occured executing subcommand: {}\nReason: {}", pcmd->getName(), e.what());
+    return 2;
+  }
 
   return 0;
 }
