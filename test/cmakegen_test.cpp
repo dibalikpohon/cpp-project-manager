@@ -1,7 +1,7 @@
 #include <string>
 #include <filesystem>
 #include <gtest/gtest.h>
-#include "../src/cmake_gen/cmake_gen.hpp"
+#include "../src/cmakegen/cmakegen.hpp"
 
 
 using namespace cmakegen;
